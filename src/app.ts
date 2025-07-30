@@ -1,12 +1,12 @@
 import express from 'express';
 import cors from 'cors';
-import connectDB from './config/db.ts';
-import './config/env.ts';
-import authRouter from './router/auth.ts';
+import connectDB from './config/db.js';
+import './config/env.js';
+import authRouter from './router/auth.js';
 
 const app = express();
 app.use(cors({
-    origin: ['http://localhost:3000', 'https://dasc-anagram-generator-jet.vercel.app'], 
+    origin: 'http://localhost:3000', 
     credentials: true,            
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], 
     allowedHeaders: ['Content-Type', 'Authorization'],    
