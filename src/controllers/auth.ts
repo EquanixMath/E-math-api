@@ -1,9 +1,10 @@
 import type { Request, Response } from 'express';
+import User from '../models/User.js';
+import BlacklistedToken from '../models/BlacklistedToken.js';
+import { JWT_SECRET, ALLOWED_USERNAME } from '../config/env.js';
+import type { AuthRequest } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
-import User from '../models/User.ts';
-import BlacklistedToken from '../models/BlacklistedToken.ts';
-import { JWT_SECRET, ALLOWED_USERNAME } from '../config/env.ts';
-import type { AuthRequest } from '../middleware/auth.ts';
+import bcrypt from 'bcrypt';
 
 export const register = async (req: Request, res: Response) => {
   const { username, password } = req.body;

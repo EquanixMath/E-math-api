@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
+import { JWT_SECRET } from '../config/env.js';
+import BlacklistedToken from '../models/BlacklistedToken.js';
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET } from '../config/env.ts';
-import BlacklistedToken from '../models/BlacklistedToken.ts';
 
 export interface AuthRequest extends Request {
   user?: any;
