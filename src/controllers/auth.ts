@@ -1,16 +1,13 @@
 import type { Request, Response } from 'express';
 import User from '../models/User.js';
 import BlacklistedToken from '../models/BlacklistedToken.js';
-import { JWT_SECRET, ALLOWED_USERNAME } from '../config/env.js';
+import { JWT_SECRET } from '../config/env.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 
 export const register = async (req: Request, res: Response) => {
   const { username, password } = req.body;
-  if (username !== ALLOWED_USERNAME) {
-    return res.status(403).json({ message: 'Registration not allowed' });
-  }
   const existing = await User.findOne({ username });
   if (existing) {
     return res.status(400).json({ message: 'User already exists' });
