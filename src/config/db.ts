@@ -18,8 +18,6 @@ const connectDB = async () => {
   try {
     // Mongoose connection options for serverless
     const options = {
-      bufferCommands: false, // Disable mongoose buffering
-      bufferMaxEntries: 0, // Disable mongoose buffering
       useNewUrlParser: true,
       useUnifiedTopology: true,
       maxPoolSize: 10, // Maintain up to 10 socket connections
