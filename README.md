@@ -1,46 +1,138 @@
-# E-math-api Auth System
+# E-Math API
 
-## Setup
+API สำหรับระบบ Math Bingo Generator
 
-1. ติดตั้ง dependencies
+## การติดตั้งและรัน API บน Localhost:3001
+
+### 1. ติดตั้ง Dependencies
 
 ```bash
+# ติดตั้ง dependencies ทั้งหมด
 npm install
 ```
 
-2. สร้างไฟล์ `.env` ใน root directory แล้วใส่ค่าตัวอย่างนี้:
+### 2. สร้างไฟล์ Environment Variables
 
-```
-MONGODB_URI=mongodb://localhost:27017/emath
-JWT_SECRET=your_jwt_secret_here
-ALLOWED_USERNAME=your_username_here
-PORT=3000
+สร้างไฟล์ `.env` ในโฟลเดอร์ `E-math-api/` และเพิ่มค่าต่อไปนี้:
+
+```env
+PORT=3001
+JWT_SECRET=your_jwt_secret_key_here
+MONGODB_URI=your_mongodb_connection_string
+ALLOWED_USERNAME=your_allowed_username
 ```
 
-3. รันเซิร์ฟเวอร์
+**หมายเหตุ:**
+- `PORT=3001` - กำหนดให้ API รันบน port 3001
+- `JWT_SECRET` - ใช้สำหรับการเข้ารหัส JWT tokens
+- `MONGODB_URI` - connection string ของ MongoDB database
+- `ALLOWED_USERNAME` - username ที่อนุญาตให้เข้าสู่ระบบ
+
+### 3. รัน API
+
+#### วิธีที่ 1: รันด้วย ts-node (สำหรับ Development)
 
 ```bash
+# รันด้วย ts-node โดยตรง
+npx ts-node src/index.ts
+```
+
+#### วิธีที่ 2: Build และรัน (สำหรับ Production)
+
+```bash
+# Build TypeScript เป็น JavaScript
+npm run build
+
+# รันไฟล์ที่ build แล้ว
+node dist/index.js
+```
+
+#### วิธีที่ 3: เพิ่ม Script ใน package.json
+
+เพิ่ม script ต่อไปนี้ใน `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc"
+  }
+}
+```
+
+จากนั้นรันด้วย:
+
+```bash
+# สำหรับ development
+npm run dev
+
+# สำหรับ production (ต้อง build ก่อน)
+npm run build
+npm start
+```
+
+### 4. ตรวจสอบการทำงาน
+
+เมื่อรันสำเร็จ จะเห็นข้อความ:
+```
+Server running on port 3001
+```
+
+### 5. ทดสอบ API
+
+API จะทำงานที่ `http://localhost:3001`
+
+#### Endpoints ที่มี:
+
+- `POST /auth/login` - เข้าสู่ระบบ
+- `POST /auth/register` - ลงทะเบียน (ถ้ามี)
+- `GET /auth/profile` - ดูข้อมูลผู้ใช้ (ต้องมี token)
+
+### 6. การแก้ไขปัญหา
+
+#### ปัญหาที่พบบ่อย:
+
+1. **Port ถูกใช้งานแล้ว**
+   ```bash
+   # ตรวจสอบ process ที่ใช้ port 3001
+   lsof -i :3001
+   
+   # Kill process (ถ้าจำเป็น)
+   kill -9 <PID>
+   ```
+
+2. **MongoDB ไม่เชื่อมต่อ**
+   - ตรวจสอบ `MONGODB_URI` ในไฟล์ `.env`
+   - ตรวจสอบการเชื่อมต่อ internet
+
+3. **TypeScript compilation errors**
+   ```bash
+   # ตรวจสอบ TypeScript errors
+   npx tsc --noEmit
+   ```
+
+### 7. การพัฒนา
+
+สำหรับการพัฒนา แนะนำให้ใช้:
+
+```bash
+# รันในโหมด development พร้อม auto-reload
 npm run dev
 ```
 
-## Endpoints
+### 8. การ Deploy
 
-### POST /auth/register
-- สำหรับสมัคร user (อนุญาตเฉพาะ username ที่กำหนดใน ALLOWED_USERNAME)
-- Body: `{ "username": "your_username_here", "password": "your_password" }`
+สำหรับการ deploy บน Vercel:
 
-### POST /auth/login
-- สำหรับ login
-- Body: `{ "username": "your_username_here", "password": "your_password" }`
-- Response: `{ "token": "..." }`
+```bash
+# Build project
+npm run build
 
-### GET /auth/profile
-- ต้องแนบ Authorization header: `Bearer <token>`
-- คืนข้อมูล user
-
-## Security
-- Password hash ด้วย bcrypt
-- JWT เก็บ secret ใน .env
-- Register ได้เฉพาะ username ที่กำหนด
-
+# Deploy (ถ้าใช้ Vercel CLI)
+vercel
 ```
+
+---
+
+**หมายเหตุ:** ตรวจสอบให้แน่ใจว่า MongoDB database พร้อมใช้งานและ connection string ถูกต้องก่อนรัน API
