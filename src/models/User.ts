@@ -148,6 +148,11 @@ UserSchema.methods.getPublicProfile = function(): object {
     delete userObject._id;
   }
   
+  // Handle approvedBy field - if it's populated, extract only the username
+  if (userObject.approvedBy && typeof userObject.approvedBy === 'object') {
+    userObject.approvedBy = userObject.approvedBy.username || userObject.approvedBy.id || null;
+  }
+  
   return userObject;
 };
 

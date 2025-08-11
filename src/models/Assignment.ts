@@ -276,12 +276,23 @@ AssignmentSchema.methods.getAssignmentWithProgress = function(): object {
   const doneCount = assignment.students.filter((s: IStudentAssignment) => s.status === AssignmentStatus.DONE).length;
   
   // เพิ่มข้อมูลความคืบหน้าให้แต่ละนักเรียน
-  assignment.students = assignment.students.map((student: IStudentAssignment) => ({
-    ...student,
-    progressPercentage: Math.round((student.answers.length / assignment.totalQuestions) * 100),
-    answeredQuestions: student.answers.length,
-    remainingQuestions: assignment.totalQuestions - student.answers.length
-  }));
+  assignment.students = assignment.students.map((student: IStudentAssignment) => {
+    // Handle studentId field - if it's populated, extract only the id
+    let studentId: any = student.studentId;
+    if (studentId && typeof studentId === 'object' && studentId._id) {
+      studentId = studentId._id.toString();
+    } else if (studentId && typeof studentId === 'object' && studentId.id) {
+      studentId = studentId.id;
+    }
+    
+    return {
+      ...student,
+      studentId: studentId,
+      progressPercentage: Math.round((student.answers.length / assignment.totalQuestions) * 100),
+      answeredQuestions: student.answers.length,
+      remainingQuestions: assignment.totalQuestions - student.answers.length
+    };
+  });
   
   // Transform _id to id
   if (assignment._id) {
