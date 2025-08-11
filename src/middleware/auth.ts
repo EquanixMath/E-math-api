@@ -163,3 +163,60 @@ export const requireApprovedUser = async (req: AuthRequest, res: Response, next:
     return res.status(500).json({ message: 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์' });
   }
 };
+
+/**
+ * Middleware สำหรับตรวจสอบสิทธิ์เข้าถึงข้อมูลนักเรียน
+ * Admin สามารถเข้าถึงข้อมูลนักเรียนใดก็ได้
+ * Student สามารถเข้าถึงข้อมูลตนเองเท่านั้น
+ */
+export const requireStudentAccess = (paramName: string = 'studentId') => {
+  return async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      // ตรวจสอบว่ามี user ใน request หรือไม่
+      if (!req.user) {
+        return res.status(401).json({ message: 'กรุณาเข้าสู่ระบบ' });
+      }
+
+      const targetStudentId = req.params[paramName];
+      
+      // ตรวจสอบว่ามี studentId ใน params หรือไม่
+      if (!targetStudentId) {
+        return res.status(400).json({ message: 'ไม่พบ Student ID ใน request' });
+      }
+
+      // Admin สามารถเข้าถึงข้อมูลนักเรียนใดก็ได้
+      if (req.user.role === UserRole.ADMIN) {
+        console.log('✅ Admin access granted for student:', targetStudentId);
+        return next();
+      }
+
+      // Student สามารถเข้าถึงข้อมูลตนเองเท่านั้น
+      if (req.user.role === UserRole.STUDENT) {
+        if (req.user.status !== 'approved') {
+          return res.status(403).json({ 
+            message: 'บัญชีของคุณยังไม่ได้รับการอนุมัติ',
+            status: req.user.status
+          });
+        }
+
+        if (req.user.id !== targetStudentId) {
+          return res.status(403).json({ 
+            message: 'ไม่มีสิทธิ์เข้าถึงข้อมูลนักเรียนคนอื่น' 
+          });
+        }
+
+        console.log('✅ Student access granted for own data:', req.user.username);
+        return next();
+      }
+
+      // Role ไม่ถูกต้อง
+      return res.status(403).json({ 
+        message: 'ไม่มีสิทธิ์เข้าถึง',
+        userRole: req.user.role
+      });
+    } catch (error) {
+      console.error('❌ Student access authorization failed:', error);
+      return res.status(500).json({ message: 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์' });
+    }
+  };
+};

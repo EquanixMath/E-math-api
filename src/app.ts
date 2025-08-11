@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import './config/env.js';
 import authRouter from './router/auth.js';
+import assignmentRouter from './router/assignment.js';
 
 const app = express();
 
@@ -9,7 +10,7 @@ const app = express();
 app.use(cors({
     origin: ['http://localhost:3000', 'http://localhost:3001', 'https://ds-bingo-pmprwdascver-2025.vercel.app'], 
     credentials: true,            
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], 
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], 
     allowedHeaders: ['Content-Type', 'Authorization'],    
 }));
 
@@ -19,10 +20,19 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/auth', authRouter);
+app.use('/assignments', assignmentRouter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Server is running' });
+  res.json({ 
+    status: 'OK', 
+    message: 'Server is running',
+    timestamp: new Date().toISOString(),
+    modules: {
+      auth: true,
+      assignments: true
+    }
+  });
 });
 
 // 404 handler
