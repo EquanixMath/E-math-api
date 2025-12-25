@@ -14,6 +14,12 @@ export interface IAnswer {
   questionText: string;
   answerText: string;
   answeredAt: Date;
+  listPosLock?: ILockedPos[];
+}
+
+export interface ILockedPos {
+  pos: number;    // index ใน answer slots (0-based)
+  value: string;  // token ที่ lock อยู่ตำแหน่งนั้น
 }
 
 // Interface สำหรับข้อมูลนักเรียนในงาน
@@ -26,7 +32,9 @@ export interface IStudentAssignment {
   answers: IAnswer[];
   currentQuestionSet: number; // Track which option set student is currently on
   questionsCompletedInCurrentSet: number; // Track progress within current set
-  currentQuestionElements?: string[] | null; // Persist generated tokens for current question
+  currentQuestionElements?: string[] | null; // Persist generated tokens for current question (rack tiles)
+  currentQuestionSolutionTokens?: string[] | null; // Persist solution tokens (answer) for lock pos reference
+  currentQuestionListPosLock?: ILockedPos[] | null;
 }
 
 // New interface for option sets
@@ -80,6 +88,7 @@ export interface IOptionSet {
       blank: boolean;
       zero: boolean;
     };
+    isLockPos?: boolean;
   };
   numQuestions: number;
   setLabel?: string; // Optional label like "8tile", "9tile"
@@ -104,6 +113,14 @@ export interface IAssignment extends Document {
   shouldProgressToNextSet(studentId: string): boolean;
 }
 
+const LockedPosSchema = new Schema<ILockedPos>(
+  {
+    pos: { type: Number, required: true, min: 0 },
+    value: { type: String, required: true, trim: true }
+  },
+  { _id: false }
+);
+
 // Schema สำหรับคำตอบ
 const AnswerSchema = new Schema<IAnswer>({
   questionNumber: { 
@@ -126,7 +143,8 @@ const AnswerSchema = new Schema<IAnswer>({
   answeredAt: { 
     type: Date, 
     default: Date.now 
-  }
+  },
+  listPosLock: { type: [LockedPosSchema], default: undefined }
 }, { _id: false });
 
 // Schema สำหรับข้อมูลนักเรียนในงาน
@@ -147,7 +165,9 @@ const StudentAssignmentSchema = new Schema<IStudentAssignment>({
   answers: [AnswerSchema],
   currentQuestionSet: { type: Number, default: 0 }, // Index of current option set
   questionsCompletedInCurrentSet: { type: Number, default: 0 }, // Questions completed in current set
-  currentQuestionElements: { type: [String], default: null }
+  currentQuestionElements: { type: [String], default: null },
+  currentQuestionSolutionTokens: { type: [String], default: null },
+  currentQuestionListPosLock: { type: [LockedPosSchema], default: null }
 }, { _id: false });
 
 // Schema สำหรับ Option Set
@@ -200,7 +220,8 @@ const OptionSetSchema = new Schema<IOptionSet>({
       heavy: { type: Boolean, default: false },
       blank: { type: Boolean, default: false },
       zero: { type: Boolean, default: false }
-    }
+    },
+    isLockPos: { type: Boolean, default: false }
   },
   numQuestions: { type: Number, required: true },
   setLabel: { type: String }

@@ -75,7 +75,41 @@ export const createAssignment = async (req: AuthRequest, res: Response) => {
 
         // Normalize options to ensure all fields are persisted
         const opts = set.options;
+        
+        // ✅ DEBUG: Log incoming options
+        console.log(`[Backend] Option set ${i + 1} - Raw options:`, JSON.stringify(opts, null, 2));
+        console.log(`[Backend] Option set ${i + 1} - lockMode:`, opts.lockMode, 'isLockPos:', opts.isLockPos);
+        
+        // Normalize lock mode: support both lockMode and isLockPos (and various aliases)
+        const rawLockMode =
+          opts.lockMode ??
+          opts.isLockPos ??
+          opts.islockpos ??
+          opts.isLockPosition ??
+          opts.islockposition ??
+          opts.lockPositionMode ??
+          opts.lockpositionmode ??
+          opts.posLockMode ??
+          opts.poslockmode ??
+          false;
+        
+        // Convert string 'true'/'false' to boolean if needed
+        const lockMode =
+          typeof rawLockMode === "string"
+            ? rawLockMode.toLowerCase() === "true"
+            : Boolean(rawLockMode);
+        
+        // Calculate lockCount: when lockMode is true, lockCount = totalCount - 8
+        const totalCount = Number(opts.totalCount ?? 8);
+        const lockCount = lockMode ? Math.max(0, totalCount - 8) : 0;
+        
+        // ✅ DEBUG: Log normalized values
+        console.log(`[Backend] Option set ${i + 1} - Normalized lockMode:`, lockMode, 'lockCount:', lockCount);
+        
+        // ✅ Use spread operator to preserve all fields, then override with normalized values
         const normalizedOptions = {
+          ...opts, // Preserve all original fields
+          // Override with normalized/validated values
           totalCount: opts.totalCount,
           operatorMode: opts.operatorMode,
           operatorCount: opts.operatorCount,
@@ -114,7 +148,15 @@ export const createAssignment = async (req: AuthRequest, res: Response) => {
             blank: opts.randomSettings.blank ?? true,
             zero: opts.randomSettings.zero ?? true,
           } : undefined,
+          // ✅ Lock position fields - normalize to isLockPos (backend canonical field)
+          // IMPORTANT: These must come AFTER spread to override any existing values
+          isLockPos: lockMode,
+          lockMode: lockMode,
+          lockCount: lockCount,
         };
+        
+        // ✅ DEBUG: Log final normalized options
+        console.log(`[Backend] Option set ${i + 1} - Final normalizedOptions.isLockPos:`, normalizedOptions.isLockPos);
 
         validatedOptionSets.push({
           options: normalizedOptions,
@@ -389,7 +431,12 @@ export const startAssignment = async (req: AuthRequest, res: Response) => {
 export const submitAnswer = async (req: AuthRequest, res: Response) => {
   try {
     const { id, studentId } = req.params;
-    const { questionNumber, questionText, answerText } = req.body;
+    const { questionNumber, questionText, answerText, listPosLock } = req.body as {
+      questionNumber: number;
+      questionText: string;
+      answerText: string;
+      listPosLock?: { pos: number; value: string }[];
+    };    
 
     // ตรวจสอบ IDs
     if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(studentId)) {
@@ -426,6 +473,20 @@ export const submitAnswer = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    if (listPosLock !== undefined) {
+      if (!Array.isArray(listPosLock)) {
+        return res.status(400).json({ message: 'listPosLock ต้องเป็น array' });
+      }
+      for (const item of listPosLock) {
+        if (typeof item?.pos !== 'number' || item.pos < 0) {
+          return res.status(400).json({ message: 'listPosLock.pos ต้องเป็น number >= 0' });
+        }
+        if (typeof item?.value !== 'string' || item.value.trim() === '') {
+          return res.status(400).json({ message: 'listPosLock.value ต้องเป็น string ที่ไม่ว่าง' });
+        }
+      }
+    }    
+
     // ค้นหานักเรียนในงาน
     const studentIndex = assignment.students.findIndex(
       s => s.studentId.toString() === studentId
@@ -459,12 +520,18 @@ export const submitAnswer = async (req: AuthRequest, res: Response) => {
       a => a.questionNumber === questionNumber
     );
 
+    const stu = assignment.students[studentIndex];
+
     const newAnswer = {
       questionNumber,
       questionText: questionText.trim(),
       answerText: answerText.trim(),
-      answeredAt: new Date()
+      answeredAt: new Date(),
+      listPosLock: Array.isArray(listPosLock)
+        ? listPosLock
+        : (stu.currentQuestionListPosLock ?? undefined),
     };
+
 
     if (existingAnswerIndex >= 0) {
       // แก้ไขคำตอบเดิม
@@ -476,7 +543,8 @@ export const submitAnswer = async (req: AuthRequest, res: Response) => {
     }
 
     // Clear persisted current question after submission
-    assignment.students[studentIndex].currentQuestionElements = null;
+    assignment.students[studentIndex].currentQuestionListPosLock = null;
+    assignment.students[studentIndex].currentQuestionSolutionTokens = null;
 
     // ตรวจสอบ progression logic ถ้ามี option sets
     if (assignment.optionSets && assignment.optionSets.length > 0) {
@@ -904,7 +972,9 @@ export const getCurrentOptionSet = async (req: AuthRequest, res: Response) => {
       questionsCompleted: currentSetInfo.questionsCompleted,
       shouldProgress: assignment.shouldProgressToNextSet(studentId),
       totalSets: assignment.optionSets ? assignment.optionSets.length : 0,
-      currentQuestionElements: student.currentQuestionElements || null
+      currentQuestionElements: student.currentQuestionElements || null,
+      currentQuestionSolutionTokens: student.currentQuestionSolutionTokens || null,
+      currentQuestionListPosLock: student.currentQuestionListPosLock || null
     });
   } catch (error) {
     console.error('Get current option set error:', error);
@@ -919,7 +989,11 @@ export const getCurrentOptionSet = async (req: AuthRequest, res: Response) => {
 export const setCurrentQuestionElements = async (req: AuthRequest, res: Response) => {
   try {
     const { id, studentId } = req.params;
-    const { elements } = req.body as { elements?: string[] };
+    const { elements, solutionTokens, listPosLock } = req.body as {
+      elements?: string[];
+      solutionTokens?: string[];
+      listPosLock?: { pos: number; value: string }[];
+    };    
 
     if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(studentId)) {
       return res.status(400).json({ message: 'Assignment ID หรือ Student ID ไม่ถูกต้อง' });
@@ -928,6 +1002,53 @@ export const setCurrentQuestionElements = async (req: AuthRequest, res: Response
     if (!Array.isArray(elements) || elements.length === 0) {
       return res.status(400).json({ message: 'elements ต้องเป็น array ของ string ที่ไม่ว่าง' });
     }
+
+    if (listPosLock !== undefined) {
+      if (!Array.isArray(listPosLock)) {
+        return res.status(400).json({ message: 'listPosLock ต้องเป็น array' });
+      }
+      for (let i = 0; i < listPosLock.length; i++) {
+        const item = listPosLock[i];
+        if (!item || typeof item !== 'object') {
+          return res.status(400).json({ 
+            message: `listPosLock[${i}] ต้องเป็น object` 
+          });
+        }
+        if (typeof item.pos !== 'number' || item.pos < 0 || !Number.isInteger(item.pos)) {
+          return res.status(400).json({ 
+            message: `listPosLock[${i}].pos ต้องเป็น integer >= 0, got: ${item.pos}` 
+          });
+        }
+        if (typeof item.value !== 'string') {
+          return res.status(400).json({ 
+            message: `listPosLock[${i}].value ต้องเป็น string, got: ${typeof item.value}` 
+          });
+        }
+        if (item.value.trim() === '') {
+          return res.status(400).json({ 
+            message: `listPosLock[${i}].value ต้องไม่ว่าง` 
+          });
+        }
+        // ✅ IMPORTANT: elements is rack elements (excludes locked tiles), but listPosLock.pos is solutionTokens indices
+        // So we cannot validate pos against elements.length
+        // Instead, we validate that pos is non-negative and reasonable (max 20 tiles total)
+        if (item.pos < 0) {
+          return res.status(400).json({ 
+            message: `listPosLock[${i}].pos (${item.pos}) ต้องเป็น non-negative integer` 
+          });
+        }
+        if (item.pos >= 20) {
+          return res.status(400).json({ 
+            message: `listPosLock[${i}].pos (${item.pos}) เกินค่าสูงสุดที่อนุญาต (20)` 
+          });
+        }
+        // ✅ Note: We don't validate pos against elements.length because:
+        // - elements = rack elements (excludes locked tiles, typically 8 tiles)
+        // - listPosLock.pos = solutionTokens indices (includes locked tiles, typically 10-15 tiles)
+        // - So pos can be >= elements.length, which is expected
+      }
+    }
+    
 
     const assignment = await Assignment.findById(id);
     if (!assignment) {
@@ -948,18 +1069,110 @@ export const setCurrentQuestionElements = async (req: AuthRequest, res: Response
       return res.status(403).json({ message: 'ไม่มีสิทธิ์ดำเนินการ' });
     }
 
-    // บันทึก elements เฉพาะเมื่อยังไม่มีการตั้งไว้ (ป้องกัน overwrite เวลา refresh)
-    if (!assignment.students[studentIndex].currentQuestionElements || assignment.students[studentIndex].currentQuestionElements!.length === 0) {
-      assignment.students[studentIndex].currentQuestionElements = elements;
-      await assignment.save();
+    const stu = assignment.students[studentIndex];
+
+    // ✅ บันทึกเฉพาะเมื่อยังไม่มี elements (กัน refresh overwrite)
+    // ✅ IMPORTANT: listPosLock ควรจะไม่ถูก overwrite ถ้ามีอยู่แล้วใน DB
+    // ยกเว้นเมื่อส่ง listPosLock มาอย่างชัดเจนและต่างจากที่มีอยู่
+    const shouldSetElements =
+      !stu.currentQuestionElements || stu.currentQuestionElements.length === 0;
+    
+    // ✅ บันทึก solutionTokens เมื่อยังไม่มี หรือเมื่อมี elements ใหม่
+    const shouldSetSolutionTokens =
+      !stu.currentQuestionSolutionTokens || stu.currentQuestionSolutionTokens.length === 0 ||
+      (solutionTokens && solutionTokens.length > 0);
+
+    // ✅ Check if listPosLock should be updated
+    // IMPORTANT: Protect existing lock positions from being overwritten on refresh
+    // Only update if:
+    // 1. listPosLock is explicitly provided (not undefined), AND
+    // 2. Either no existing lock positions in DB, OR the new one is different
+    // 3. If listPosLock is null/empty and existing exists, don't overwrite (protect from refresh)
+    const existingLockPos = stu.currentQuestionListPosLock;
+    const hasExistingLockPos = existingLockPos && existingLockPos.length > 0;
+    const existingLockPosKey = hasExistingLockPos
+      ? JSON.stringify(existingLockPos.sort((a, b) => a.pos - b.pos))
+      : 'null';
+    const newLockPosKey = listPosLock && listPosLock.length > 0
+      ? JSON.stringify(listPosLock.sort((a, b) => a.pos - b.pos))
+      : 'null';
+    
+    // ✅ CRITICAL: Don't overwrite existing lock positions with null/empty on refresh
+    // If existing lock positions exist and new one is null/empty, keep existing
+    const shouldSetLockPos = listPosLock !== undefined && (
+      !hasExistingLockPos || // No existing lock positions - safe to set
+      (newLockPosKey !== 'null' && existingLockPosKey !== newLockPosKey) // New non-empty and different
+    );
+
+    console.log('💾 setCurrentQuestionElements:', {
+      assignmentId: id,
+      studentId,
+      elementsCount: elements.length,
+      listPosLockCount: listPosLock?.length ?? 0,
+      shouldSetElements,
+      shouldSetLockPos,
+      hasExistingElements: !!stu.currentQuestionElements && stu.currentQuestionElements.length > 0,
+      hasExistingLockPos: !!existingLockPos && existingLockPos.length > 0,
+      existingLockPosKey,
+      newLockPosKey,
+      lockPosChanged: existingLockPosKey !== newLockPosKey
+    });
+
+    // ✅ Use atomic update to avoid version conflict
+    const updateQuery: any = {};
+    
+    if (shouldSetElements) {
+      updateQuery[`students.${studentIndex}.currentQuestionElements`] = elements;
     }
+    
+    // ✅ Store solutionTokens when provided
+    if (shouldSetSolutionTokens && solutionTokens && solutionTokens.length > 0) {
+      updateQuery[`students.${studentIndex}.currentQuestionSolutionTokens`] = solutionTokens;
+    }
+    
+    // ✅ Only update listPosLock if it should be updated (protect existing lock positions from refresh)
+    if (shouldSetLockPos) {
+      updateQuery[`students.${studentIndex}.currentQuestionListPosLock`] = Array.isArray(listPosLock) ? listPosLock : null;
+    }
+
+    // ✅ Use findOneAndUpdate with atomic operators to avoid version conflicts
+    const updatedAssignment = await Assignment.findOneAndUpdate(
+      { _id: id },
+      { $set: updateQuery },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedAssignment) {
+      return res.status(404).json({ message: 'ไม่พบงานที่ระบุ' });
+    }
+
+    // Verify student still exists
+    const updatedStudent = updatedAssignment.students.find(
+      s => s.studentId.toString() === studentId
+    );
+
+    if (!updatedStudent) {
+      return res.status(404).json({ message: 'ไม่พบนักเรียนในงานนี้' });
+    }
+
+    console.log('✅ Successfully updated elements and lock positions using atomic update');
 
     return res.json({
       message: 'บันทึกโจทย์ปัจจุบันเรียบร้อย',
-      currentQuestionElements: assignment.students[studentIndex].currentQuestionElements
-    });
+      currentQuestionElements: updatedStudent.currentQuestionElements,
+      currentQuestionSolutionTokens: updatedStudent.currentQuestionSolutionTokens ?? null,
+      currentQuestionListPosLock: updatedStudent.currentQuestionListPosLock ?? null
+    });    
   } catch (error) {
-    console.error('Set current question error:', error);
-    return res.status(500).json({ message: 'เกิดข้อผิดพลาดในระบบ' });
+    console.error('❌ Set current question error:', error);
+    console.error('❌ Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    return res.status(500).json({ 
+      message: 'เกิดข้อผิดพลาดในระบบ',
+      error: error instanceof Error ? error.message : String(error)
+    });
   }
 };
