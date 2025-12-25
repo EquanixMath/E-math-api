@@ -473,7 +473,24 @@ export const submitAnswer = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    if (listPosLock !== undefined) {
+    // ค้นหานักเรียนในงานเพื่อเช็ค currentQuestionSet
+    const studentIndex = assignment.students.findIndex(
+      s => s.studentId.toString() === studentId
+    );
+
+    if (studentIndex === -1) {
+      return res.status(404).json({ message: 'ไม่พบนักเรียนในงานนี้' });
+    }
+
+    const student = assignment.students[studentIndex];
+
+    // ✅ เช็คว่า assignment มี isLockPos หรือไม่ จาก current option set
+    const hasLockPosEnabled = assignment.optionSets && 
+      assignment.optionSets.length > 0 && 
+      assignment.optionSets[student.currentQuestionSet]?.options?.isLockPos === true;
+
+    // ✅ Validate listPosLock เฉพาะเมื่อ assignment มี isLockPos เป็น true
+    if (hasLockPosEnabled && listPosLock !== undefined) {
       if (!Array.isArray(listPosLock)) {
         return res.status(400).json({ message: 'listPosLock ต้องเป็น array' });
       }
@@ -485,18 +502,7 @@ export const submitAnswer = async (req: AuthRequest, res: Response) => {
           return res.status(400).json({ message: 'listPosLock.value ต้องเป็น string ที่ไม่ว่าง' });
         }
       }
-    }    
-
-    // ค้นหานักเรียนในงาน
-    const studentIndex = assignment.students.findIndex(
-      s => s.studentId.toString() === studentId
-    );
-
-    if (studentIndex === -1) {
-      return res.status(404).json({ message: 'ไม่พบนักเรียนในงานนี้' });
     }
-
-    const student = assignment.students[studentIndex];
 
     // ตรวจสอบสิทธิ์ (Admin หรือนักเรียนคนนั้นเอง)
     const isAdmin = req.user!.role === UserRole.ADMIN;
