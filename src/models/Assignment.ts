@@ -99,6 +99,7 @@ export interface IAssignment extends Document {
   title: string;
   description: string;
   totalQuestions: number;
+  timeLimitSeconds?: number;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -252,9 +253,14 @@ const AssignmentSchema = new Schema<IAssignment>({
     ref: 'User', 
     required: true 
   },
-  dueDate: { 
-    type: Date, 
-    required: true 
+  dueDate: {
+    type: Date,
+    required: true
+  },
+  timeLimitSeconds: {
+    type: Number,
+    min: 1,
+    default: null
   },
   students: [StudentAssignmentSchema],
   optionSets: [OptionSetSchema] // Array of option sets

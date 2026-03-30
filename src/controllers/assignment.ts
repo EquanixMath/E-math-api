@@ -10,7 +10,7 @@ import mongoose from 'mongoose';
  */
 export const createAssignment = async (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, totalQuestions, dueDate, studentIds, optionSets } = req.body;
+    const { title, description, totalQuestions, dueDate, timeLimitSeconds, studentIds, optionSets } = req.body;
 
     // ตรวจสอบข้อมูลที่จำเป็น
     if (!title || !description || !totalQuestions || !dueDate) {
@@ -210,6 +210,7 @@ export const createAssignment = async (req: AuthRequest, res: Response) => {
       totalQuestions,
       createdBy: new mongoose.Types.ObjectId(req.user!.id),
       dueDate: dueDateObj,
+      timeLimitSeconds: timeLimitSeconds ? Number(timeLimitSeconds) : null,
       students,
       optionSets: validatedOptionSets
     });
@@ -817,6 +818,7 @@ export const getStudentAssignments = async (req: AuthRequest, res: Response) => 
         title: assignmentObj.title,
         description: assignmentObj.description,
         totalQuestions: assignmentObj.totalQuestions,
+        timeLimitSeconds: assignmentObj.timeLimitSeconds ?? null,
         dueDate: assignmentObj.dueDate,
         createdBy: assignmentObj.createdBy,
         createdAt: assignmentObj.createdAt,
