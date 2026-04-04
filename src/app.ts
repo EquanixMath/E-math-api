@@ -16,6 +16,7 @@ app.use(cors({
     'https://ds-bingo-pmprwdascver-2025.vercel.app',
     'http://192.168.169.7:3000',
     'http://10.242.54.7:3000',
+    'http://10.156.11.7:3000',
     'http://192.168.1.39:3000'
   ],
   credentials: true,
