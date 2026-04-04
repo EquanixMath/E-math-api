@@ -7,6 +7,10 @@ export var AssignmentStatus;
     AssignmentStatus["COMPLETE"] = "complete";
     AssignmentStatus["DONE"] = "done";
 })(AssignmentStatus || (AssignmentStatus = {}));
+const LockedPosSchema = new Schema({
+    pos: { type: Number, required: true, min: 0 },
+    value: { type: String, required: true, trim: true }
+}, { _id: false });
 // Schema สำหรับคำตอบ
 const AnswerSchema = new Schema({
     questionNumber: {
@@ -29,7 +33,11 @@ const AnswerSchema = new Schema({
     answeredAt: {
         type: Date,
         default: Date.now
-    }
+    },
+    timeTaken: { type: Number, min: 0 },
+    score: { type: Number, min: 0 },
+    listPosLock: { type: [LockedPosSchema], default: undefined },
+    slotTypes: { type: [String], default: undefined }
 }, { _id: false });
 // Schema สำหรับข้อมูลนักเรียนในงาน
 const StudentAssignmentSchema = new Schema({
@@ -46,7 +54,69 @@ const StudentAssignmentSchema = new Schema({
     startedAt: Date,
     completedAt: Date,
     markedDoneAt: Date,
-    answers: [AnswerSchema]
+    answers: [AnswerSchema],
+    currentQuestionSet: { type: Number, default: 0 }, // Index of current option set
+    questionsCompletedInCurrentSet: { type: Number, default: 0 }, // Questions completed in current set
+    currentQuestionElements: { type: [String], default: null },
+    currentQuestionSolutionTokens: { type: [String], default: null },
+    currentQuestionListPosLock: { type: [LockedPosSchema], default: null },
+    currentQuestionSlotTypes: { type: [String], default: null }
+}, { _id: false });
+// Schema สำหรับ Option Set
+const OptionSetSchema = new Schema({
+    options: {
+        totalCount: { type: Number, required: true },
+        operatorMode: { type: String, enum: ['random', 'specific'], required: true },
+        operatorCount: { type: Number, required: true },
+        specificOperators: {
+            plus: Number,
+            minus: Number,
+            multiply: Number,
+            divide: Number
+        },
+        equalsCount: { type: Number, required: true },
+        heavyNumberCount: { type: Number, required: true },
+        BlankCount: { type: Number, required: true },
+        zeroCount: { type: Number, required: true },
+        operatorCounts: {
+            '+': Number,
+            '-': Number,
+            '×': Number,
+            '÷': Number
+        },
+        operatorFixed: {
+            '+': { type: Number, default: null },
+            '-': { type: Number, default: null },
+            '×': { type: Number, default: null },
+            '÷': { type: Number, default: null },
+            '+/-': { type: Number, default: null },
+            '×/÷': { type: Number, default: null }
+        },
+        equalsMode: { type: String, enum: ['random', 'specific'] },
+        equalsMin: Number,
+        equalsMax: Number,
+        heavyNumberMode: { type: String, enum: ['random', 'specific'] },
+        heavyNumberMin: Number,
+        heavyNumberMax: Number,
+        blankMode: { type: String, enum: ['random', 'specific'] },
+        blankMin: Number,
+        blankMax: Number,
+        zeroMode: { type: String, enum: ['random', 'specific'] },
+        zeroMin: Number,
+        zeroMax: Number,
+        operatorMin: Number,
+        operatorMax: Number,
+        randomSettings: {
+            operators: { type: Boolean, default: false },
+            equals: { type: Boolean, default: false },
+            heavy: { type: Boolean, default: false },
+            blank: { type: Boolean, default: false },
+            zero: { type: Boolean, default: false }
+        },
+        isLockPos: { type: Boolean, default: false }
+    },
+    numQuestions: { type: Number, required: true },
+    setLabel: { type: String }
 }, { _id: false });
 // Schema หลักสำหรับ Assignment
 const AssignmentSchema = new Schema({
@@ -77,7 +147,13 @@ const AssignmentSchema = new Schema({
         type: Date,
         required: true
     },
-    students: [StudentAssignmentSchema]
+    timeLimitSeconds: {
+        type: Number,
+        min: 1,
+        default: null
+    },
+    students: [StudentAssignmentSchema],
+    optionSets: [OptionSetSchema] // Array of option sets
 }, {
     timestamps: true
 });
@@ -110,12 +186,23 @@ AssignmentSchema.methods.getAssignmentWithProgress = function () {
     const completeCount = assignment.students.filter((s) => s.status === AssignmentStatus.COMPLETE).length;
     const doneCount = assignment.students.filter((s) => s.status === AssignmentStatus.DONE).length;
     // เพิ่มข้อมูลความคืบหน้าให้แต่ละนักเรียน
-    assignment.students = assignment.students.map((student) => ({
-        ...student,
-        progressPercentage: Math.round((student.answers.length / assignment.totalQuestions) * 100),
-        answeredQuestions: student.answers.length,
-        remainingQuestions: assignment.totalQuestions - student.answers.length
-    }));
+    assignment.students = assignment.students.map((student) => {
+        // Handle studentId field - if it's populated, extract only the id
+        let studentId = student.studentId;
+        if (studentId && typeof studentId === 'object' && studentId._id) {
+            studentId = studentId._id.toString();
+        }
+        else if (studentId && typeof studentId === 'object' && studentId.id) {
+            studentId = studentId.id;
+        }
+        return {
+            ...student,
+            studentId: studentId,
+            progressPercentage: Math.round((student.answers.length / assignment.totalQuestions) * 100),
+            answeredQuestions: student.answers.length,
+            remainingQuestions: assignment.totalQuestions - student.answers.length
+        };
+    });
     // Transform _id to id
     if (assignment._id) {
         assignment.id = assignment._id.toString();
@@ -146,6 +233,44 @@ AssignmentSchema.methods.getStudentProgress = function (studentId) {
         answeredQuestions: student.answers.length,
         remainingQuestions: this.totalQuestions - student.answers.length
     };
+};
+// Method to get next question set for a student
+AssignmentSchema.methods.getNextQuestionSet = function (studentId) {
+    const student = this.students.find((s) => s.studentId.toString() === studentId);
+    if (!student || !this.optionSets || this.optionSets.length === 0) {
+        return { optionSet: null, currentSetIndex: -1, questionsCompleted: 0 };
+    }
+    const currentSetIndex = student.currentQuestionSet;
+    const questionsCompleted = student.questionsCompletedInCurrentSet;
+    // If student hasn't started or has completed current set
+    if (currentSetIndex >= this.optionSets.length) {
+        return { optionSet: null, currentSetIndex: -1, questionsCompleted: 0 };
+    }
+    const currentOptionSet = this.optionSets[currentSetIndex];
+    return {
+        optionSet: currentOptionSet,
+        currentSetIndex,
+        questionsCompleted
+    };
+};
+// Method to check if student should progress to next set
+AssignmentSchema.methods.shouldProgressToNextSet = function (studentId) {
+    const student = this.students.find((s) => s.studentId.toString() === studentId);
+    if (!student || !this.optionSets || this.optionSets.length === 0) {
+        return false;
+    }
+    const currentSetIndex = student.currentQuestionSet;
+    if (currentSetIndex >= this.optionSets.length) {
+        return false; // Already completed all sets
+    }
+    const currentSet = this.optionSets[currentSetIndex];
+    return student.questionsCompletedInCurrentSet >= currentSet.numQuestions;
+};
+// Helper method to calculate progress percentage
+AssignmentSchema.methods.calculateProgressPercentage = function (student) {
+    if (this.totalQuestions === 0)
+        return 0;
+    return Math.round((student.answers.length / this.totalQuestions) * 100);
 };
 // Virtual สำหรับตรวจสอบว่าหมดเวลาแล้วหรือไม่
 AssignmentSchema.virtual('isOverdue').get(function () {

@@ -1,6 +1,6 @@
 import express from 'express';
 const { Router } = express;
-import { createAssignment, assignStudents, getAssignment, startAssignment, submitAnswer, updateStudentStatus, getStudentAssignments, getStudentAssignment, getAllAssignments, getAvailableStudents } from '../controllers/assignment.js';
+import { createAssignment, assignStudents, getAssignment, startAssignment, submitAnswer, updateStudentStatus, getStudentAssignments, getStudentAssignment, getAllAssignments, getAvailableStudents, getCurrentOptionSet, setCurrentQuestionElements, getStudentAnswers } from '../controllers/assignment.js';
 import { authMiddleware, requireAdmin, requireApprovedUser } from '../middleware/auth.js';
 const router = Router();
 // =================
@@ -9,7 +9,7 @@ const router = Router();
 /**
  * POST /assignments
  * สร้างงานใหม่ (เฉพาะ Admin)
- * Body: { title, description, totalQuestions, dueDate }
+ * Body: { title, description, totalQuestions, dueDate, optionSets? }
  * Headers: Authorization: Bearer <token>
  */
 router.post('/', authMiddleware, requireAdmin, createAssignment);
@@ -33,6 +33,26 @@ router.get('/available-students', authMiddleware, requireAdmin, getAvailableStud
  * Headers: Authorization: Bearer <token>
  */
 router.post('/:id/assign', authMiddleware, requireAdmin, assignStudents);
+/**
+ * NOTE: Place more specific nested routes BEFORE the generic '/:id' route to avoid ambiguous matches
+ */
+/**
+ * GET /assignments/:id/students/:studentId/current-set
+ * ดึง option set ปัจจุบันสำหรับนักเรียน
+ * สามารถเข้าถึงได้โดย: Admin (ดูข้อมูลนักเรียนใดก็ได้) หรือ Student (ดูข้อมูลตนเอง)
+ * Headers: Authorization: Bearer <token>
+ */
+router.get('/:id/students/:studentId/current-set', authMiddleware, requireApprovedUser, getCurrentOptionSet);
+/**
+ * PATCH /assignments/:id/students/:studentId/current-question
+ * บันทึก elements ของโจทย์ปัจจุบัน
+ */
+router.patch('/:id/students/:studentId/current-question', authMiddleware, requireApprovedUser, setCurrentQuestionElements);
+/**
+ * GET /assignments/:id/students/:studentId/answers
+ * ดึงคำตอบของนักเรียนแบบ lazy (Admin หรือเจ้าของเอง)
+ */
+router.get('/:id/students/:studentId/answers', authMiddleware, requireApprovedUser, getStudentAnswers);
 /**
  * GET /assignments/:id
  * ดูข้อมูลงานพร้อมความคืบหน้าของนักเรียน (เฉพาะ Admin)
@@ -63,8 +83,9 @@ router.patch('/:id/students/:studentId/start', authMiddleware, requireApprovedUs
  * Headers: Authorization: Bearer <token>
  */
 router.post('/:id/students/:studentId/answers', authMiddleware, requireApprovedUser, submitAnswer);
+// (moved above the generic '/:id' route)
 /**
- * GET /students/:studentId/assignments
+ * GET /assignments/students/:studentId/assignments
  * ดูงานที่ได้รับมอบหมายของนักเรียน
  * สามารถเข้าถึงได้โดย: Admin (ดูข้อมูลนักเรียนใดก็ได้) หรือ Student (ดูข้อมูลตนเอง)
  * Query: ?status=todo|inprogress|complete|done&page=1&limit=10
@@ -72,10 +93,9 @@ router.post('/:id/students/:studentId/answers', authMiddleware, requireApprovedU
  */
 router.get('/students/:studentId/assignments', authMiddleware, requireApprovedUser, getStudentAssignments);
 /**
- * GET /students/:studentId/assignments/:assignmentId
- * ดูรายละเอียดงานเฉพาะของนักเรียน
- * สามารถเข้าถึงได้โดย: Admin (ดูข้อมูลนักเรียนใดก็ได้) หรือ Student (ดูข้อมูลตนเอง)
- * Headers: Authorization: Bearer <token>
+ * GET /assignments/students/:studentId/assignments/:assignmentId
+ * ดูรายละเอียดงานเฉพาะของนักเรียน (student context)
+ * เปิดสิทธิ์ให้ทั้ง Admin และ Student ที่ได้รับงาน
  */
 router.get('/students/:studentId/assignments/:assignmentId', authMiddleware, requireApprovedUser, getStudentAssignment);
 // =================
@@ -96,7 +116,9 @@ router.get('/health', (req, res) => {
             progressTracking: true,
             answerSubmission: true,
             statusManagement: true,
-            dueDataTracking: true
+            dueDataTracking: true,
+            optionSets: true,
+            progressionLogic: true
         },
         supportedStatuses: ['todo', 'inprogress', 'complete', 'done'],
         endpoints: {
@@ -110,6 +132,7 @@ router.get('/health', (req, res) => {
             mixed: [
                 'PATCH /assignments/:id/students/:studentId/start',
                 'POST /assignments/:id/students/:studentId/answers',
+                'GET /assignments/:id/students/:studentId/current-set',
                 'GET /students/:studentId/assignments'
             ]
         }

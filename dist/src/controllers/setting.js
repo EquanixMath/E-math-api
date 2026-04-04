@@ -1,0 +1,96 @@
+import TileSet, { DEFAULT_POOL, TILE_TOKENS } from '../models/Setting.js';
+function sanitizeTiles(raw) {
+    const out = {};
+    for (const tok of TILE_TOKENS) {
+        const v = raw[tok];
+        out[tok] = (typeof v === 'number' && v >= 0) ? Math.floor(v) : 0;
+    }
+    return out;
+}
+/** GET /tile-sets — list user's sets (+ default system set) */
+export async function listTileSets(req, res) {
+    try {
+        const userId = req.user?.id;
+        const sets = await TileSet.find({ userId }).sort({ createdAt: 1 }).lean();
+        // Prepend the built-in default set (not stored in DB)
+        const defaultSet = {
+            id: 'default',
+            name: 'A-Math Standard',
+            tiles: DEFAULT_POOL,
+            isDefault: true,
+        };
+        const result = [
+            defaultSet,
+            ...sets.map(s => ({
+                id: s._id.toString(),
+                name: s.name,
+                tiles: Object.fromEntries(s.tiles.entries ? s.tiles.entries() : Object.entries(s.tiles)),
+                isDefault: false,
+            })),
+        ];
+        res.json({ tileSets: result });
+    }
+    catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+}
+/** POST /tile-sets — create a new set */
+export async function createTileSet(req, res) {
+    try {
+        const userId = req.user?.id;
+        const { name, tiles } = req.body;
+        if (!name?.trim())
+            return res.status(400).json({ message: 'Name is required' });
+        if (!tiles || typeof tiles !== 'object')
+            return res.status(400).json({ message: 'tiles object is required' });
+        const sanitized = sanitizeTiles(tiles);
+        const set = await TileSet.create({ userId, name: name.trim(), tiles: sanitized });
+        res.status(201).json({
+            tileSet: { id: set._id.toString(), name: set.name, tiles: sanitized, isDefault: false },
+        });
+    }
+    catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+}
+/** PATCH /tile-sets/:id — update name and/or tiles */
+export async function updateTileSet(req, res) {
+    try {
+        const userId = req.user?.id;
+        const { id } = req.params;
+        const set = await TileSet.findOne({ _id: id, userId });
+        if (!set)
+            return res.status(404).json({ message: 'Tile set not found' });
+        const { name, tiles } = req.body;
+        if (name?.trim())
+            set.name = name.trim();
+        if (tiles && typeof tiles === 'object')
+            set.tiles = sanitizeTiles(tiles);
+        await set.save();
+        res.json({
+            tileSet: {
+                id: set._id.toString(),
+                name: set.name,
+                tiles: Object.fromEntries(set.tiles.entries ? set.tiles.entries() : Object.entries(set.tiles)),
+                isDefault: false,
+            },
+        });
+    }
+    catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+}
+/** DELETE /tile-sets/:id */
+export async function deleteTileSet(req, res) {
+    try {
+        const userId = req.user?.id;
+        const { id } = req.params;
+        const result = await TileSet.deleteOne({ _id: id, userId });
+        if (result.deletedCount === 0)
+            return res.status(404).json({ message: 'Tile set not found' });
+        res.json({ message: 'Deleted' });
+    }
+    catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+}

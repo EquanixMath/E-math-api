@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import TileSet, { DEFAULT_POOL, TILE_TOKENS } from '../models/setting.js';
+import TileSet, { DEFAULT_POOL, TILE_TOKENS } from '../models/Setting.js';
 
 function sanitizeTiles(raw: Record<string, unknown>): Record<string, number> {
   const out: Record<string, number> = {};
