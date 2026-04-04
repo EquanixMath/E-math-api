@@ -14,7 +14,10 @@ export interface IAnswer {
   questionText: string;
   answerText: string;
   answeredAt: Date;
+  timeTaken?: number;   // seconds taken to answer this question
+  score?: number;       // score awarded for this answer
   listPosLock?: ILockedPos[];
+  slotTypes?: string[] | null; // slot type per board position (px1/px2/px3/ex2/ex3) — snapshot at submit time
 }
 
 export interface ILockedPos {
@@ -35,6 +38,7 @@ export interface IStudentAssignment {
   currentQuestionElements?: string[] | null; // Persist generated tokens for current question (rack tiles)
   currentQuestionSolutionTokens?: string[] | null; // Persist solution tokens (answer) for lock pos reference
   currentQuestionListPosLock?: ILockedPos[] | null;
+  currentQuestionSlotTypes?: string[] | null; // Persist slot types (px1/px2/px3/ex2/ex3) for each board slot
 }
 
 // New interface for option sets
@@ -141,11 +145,14 @@ const AnswerSchema = new Schema<IAnswer>({
     trim: true,
     maxlength: 2000
   },
-  answeredAt: { 
-    type: Date, 
-    default: Date.now 
+  answeredAt: {
+    type: Date,
+    default: Date.now
   },
-  listPosLock: { type: [LockedPosSchema], default: undefined }
+  timeTaken: { type: Number, min: 0 },
+  score: { type: Number, min: 0 },
+  listPosLock: { type: [LockedPosSchema], default: undefined },
+  slotTypes: { type: [String], default: undefined }
 }, { _id: false });
 
 // Schema สำหรับข้อมูลนักเรียนในงาน
@@ -168,7 +175,8 @@ const StudentAssignmentSchema = new Schema<IStudentAssignment>({
   questionsCompletedInCurrentSet: { type: Number, default: 0 }, // Questions completed in current set
   currentQuestionElements: { type: [String], default: null },
   currentQuestionSolutionTokens: { type: [String], default: null },
-  currentQuestionListPosLock: { type: [LockedPosSchema], default: null }
+  currentQuestionListPosLock: { type: [LockedPosSchema], default: null },
+  currentQuestionSlotTypes: { type: [String], default: null }
 }, { _id: false });
 
 // Schema สำหรับ Option Set

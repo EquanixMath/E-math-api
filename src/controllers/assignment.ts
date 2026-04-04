@@ -432,12 +432,14 @@ export const startAssignment = async (req: AuthRequest, res: Response) => {
 export const submitAnswer = async (req: AuthRequest, res: Response) => {
   try {
     const { id, studentId } = req.params;
-    const { questionNumber, questionText, answerText, listPosLock } = req.body as {
+    const { questionNumber, questionText, answerText, listPosLock, timeTaken, score } = req.body as {
       questionNumber: number;
       questionText: string;
       answerText: string;
       listPosLock?: { pos: number; value: string }[];
-    };    
+      timeTaken?: number;
+      score?: number;
+    };
 
     // ตรวจสอบ IDs
     if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(studentId)) {
@@ -534,9 +536,13 @@ export const submitAnswer = async (req: AuthRequest, res: Response) => {
       questionText: questionText.trim(),
       answerText: answerText.trim(),
       answeredAt: new Date(),
+      timeTaken: typeof timeTaken === 'number' && timeTaken >= 0 ? timeTaken : undefined,
+      score: typeof score === 'number' && score >= 0 ? score : undefined,
       listPosLock: Array.isArray(listPosLock)
         ? listPosLock
         : (stu.currentQuestionListPosLock ?? undefined),
+      // Snapshot slot types so the board can be reconstructed in review
+      slotTypes: Array.isArray(stu.currentQuestionSlotTypes) ? [...stu.currentQuestionSlotTypes] : undefined,
     };
 
 
@@ -550,8 +556,10 @@ export const submitAnswer = async (req: AuthRequest, res: Response) => {
     }
 
     // Clear persisted current question after submission
+    assignment.students[studentIndex].currentQuestionElements = null;
     assignment.students[studentIndex].currentQuestionListPosLock = null;
     assignment.students[studentIndex].currentQuestionSolutionTokens = null;
+    assignment.students[studentIndex].currentQuestionSlotTypes = null;
 
     // ตรวจสอบ progression logic ถ้ามี option sets
     if (assignment.optionSets && assignment.optionSets.length > 0) {
@@ -625,7 +633,11 @@ export const getStudentAnswers = async (req: AuthRequest, res: Response) => {
         questionNumber: a.questionNumber,
         questionText: a.questionText,
         answerText: a.answerText,
-        answeredAt: a.answeredAt
+        answeredAt: a.answeredAt,
+        timeTaken: a.timeTaken ?? null,
+        score: a.score ?? null,
+        listPosLock: a.listPosLock ?? [],
+        slotTypes: a.slotTypes ?? [],
       }));
 
     return res.json({
@@ -982,7 +994,8 @@ export const getCurrentOptionSet = async (req: AuthRequest, res: Response) => {
       totalSets: assignment.optionSets ? assignment.optionSets.length : 0,
       currentQuestionElements: student.currentQuestionElements || null,
       currentQuestionSolutionTokens: student.currentQuestionSolutionTokens || null,
-      currentQuestionListPosLock: student.currentQuestionListPosLock || null
+      currentQuestionListPosLock: student.currentQuestionListPosLock || null,
+      currentQuestionSlotTypes: student.currentQuestionSlotTypes || null
     });
   } catch (error) {
     console.error('Get current option set error:', error);
@@ -997,10 +1010,11 @@ export const getCurrentOptionSet = async (req: AuthRequest, res: Response) => {
 export const setCurrentQuestionElements = async (req: AuthRequest, res: Response) => {
   try {
     const { id, studentId } = req.params;
-    const { elements, solutionTokens, listPosLock } = req.body as {
+    const { elements, solutionTokens, listPosLock, slotTypes } = req.body as {
       elements?: string[];
       solutionTokens?: string[];
       listPosLock?: { pos: number; value: string }[];
+      slotTypes?: string[];
     };    
 
     if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(studentId)) {
@@ -1143,6 +1157,11 @@ export const setCurrentQuestionElements = async (req: AuthRequest, res: Response
       updateQuery[`students.${studentIndex}.currentQuestionListPosLock`] = Array.isArray(listPosLock) ? listPosLock : null;
     }
 
+    // ✅ Save slot types (px1/px2/px3/ex2/ex3) — only set on first write, same guard as elements
+    if (shouldSetElements && Array.isArray(slotTypes) && slotTypes.length > 0) {
+      updateQuery[`students.${studentIndex}.currentQuestionSlotTypes`] = slotTypes;
+    }
+
     // ✅ Use findOneAndUpdate with atomic operators to avoid version conflicts
     const updatedAssignment = await Assignment.findOneAndUpdate(
       { _id: id },
@@ -1169,7 +1188,8 @@ export const setCurrentQuestionElements = async (req: AuthRequest, res: Response
       message: 'บันทึกโจทย์ปัจจุบันเรียบร้อย',
       currentQuestionElements: updatedStudent.currentQuestionElements,
       currentQuestionSolutionTokens: updatedStudent.currentQuestionSolutionTokens ?? null,
-      currentQuestionListPosLock: updatedStudent.currentQuestionListPosLock ?? null
+      currentQuestionListPosLock: updatedStudent.currentQuestionListPosLock ?? null,
+      currentQuestionSlotTypes: updatedStudent.currentQuestionSlotTypes ?? null
     });    
   } catch (error) {
     console.error('❌ Set current question error:', error);
