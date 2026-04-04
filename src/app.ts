@@ -14,6 +14,7 @@ app.use(cors({
     'http://localhost:3000',
     'http://localhost:3001',
     'https://ds-bingo-pmprwdascver-2025.vercel.app',
+    'https://ds-bingo-pmprwdascver-2025-jet.vercel.app',
     'http://192.168.169.7:3000',
     'http://10.242.54.7:3000',
     'http://10.156.11.7:3000',
