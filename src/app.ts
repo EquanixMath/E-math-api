@@ -4,7 +4,8 @@ import './config/env.js';
 
 import authRouter from './router/auth.js';
 import assignmentRouter from './router/assignment.js';
-import settingsRouter from './router/setting.js'; // 👈 เพิ่ม
+import settingsRouter from './router/setting.js';
+import exportRouter from './router/export.js';
 
 const app = express();
 
@@ -24,12 +25,15 @@ app.use(cors({
 }));
 
 // Body parser
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 2mb covers the largest expected payload (~600KB for 1000 trimmed puzzles)
+// while still rejecting clearly abusive requests.
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // ───── Routes ─────
 app.use('/auth', authRouter);
 app.use('/assignments', assignmentRouter);
+app.use('/api/export', exportRouter);
 
 // 🔥 ตัวที่คุณขาด
 app.use('/', settingsRouter);
@@ -52,6 +56,10 @@ app.use('*', (req, res) => {
 
 // Error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.type === 'entity.too.large') {
+    res.status(413).json({ message: 'Payload too large. Maximum request size is 2MB.' });
+    return;
+  }
   console.error('Error:', err);
   res.status(500).json({ message: 'Internal server error' });
 });

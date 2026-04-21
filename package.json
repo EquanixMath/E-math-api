@@ -14,12 +14,14 @@
     "@vercel/node": "^5.3.7",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
+    "docx": "^9.6.1",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "hono": "^4.8.0",
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.18.0",
-    "mongoose": "^7.6.3"
+    "mongoose": "^7.6.3",
+    "puppeteer": "^24.42.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.0",
