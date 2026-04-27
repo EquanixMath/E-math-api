@@ -205,15 +205,30 @@ function computeSolutionScore(puzzle: ExportPuzzle): number | null {
 // ─────────────────────────────────────────────
 
 function sortRack(tiles: string[]): string[] {
+  const getRank = (t: string) => {
+    const n = Number(t);
+    if (!isNaN(n)) return { group: 0, value: n }; // numbers
+
+    if (['+', '-', '×', '÷'].includes(t)) {
+      return { group: 1, value: ['+', '-', '×', '÷'].indexOf(t) };
+    }
+
+    if (['+/-', '×/÷'].includes(t)) {
+      return { group: 2, value: ['+/-', '×/÷'].indexOf(t) };
+    }
+
+    if (t === '=') return { group: 3, value: 0 };
+    if (t === '?') return { group: 4, value: 0 };
+
+    return { group: 5, value: 0 }; // fallback
+  };
+
   return [...tiles].sort((a, b) => {
-    const an = parseFloat(a), bn = parseFloat(b);
-    const aNum = !isNaN(an), bNum = !isNaN(bn);
-    if (aNum && bNum) return an - bn;
-    if (aNum) return -1;
-    if (bNum) return 1;
-    if (a === '=') return -1;
-    if (b === '=') return 1;
-    return OP_ORDER.indexOf(a) - OP_ORDER.indexOf(b);
+    const ra = getRank(a);
+    const rb = getRank(b);
+
+    if (ra.group !== rb.group) return ra.group - rb.group;
+    return ra.value - rb.value;
   });
 }
 
