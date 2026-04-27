@@ -205,9 +205,13 @@ function computeSolutionScore(puzzle: ExportPuzzle): number | null {
 // ─────────────────────────────────────────────
 
 function sortRack(tiles: string[]): string[] {
-  const getRank = (t: string) => {
+  const normalize = (t: string) => t.trim();
+
+  const getRank = (raw: string) => {
+    const t = normalize(raw);
     const n = Number(t);
-    if (!isNaN(n)) return { group: 0, value: n }; // numbers
+
+    if (!isNaN(n)) return { group: 0, value: n };
 
     if (['+', '-', '×', '÷'].includes(t)) {
       return { group: 1, value: ['+', '-', '×', '÷'].indexOf(t) };
@@ -220,7 +224,7 @@ function sortRack(tiles: string[]): string[] {
     if (t === '=') return { group: 3, value: 0 };
     if (t === '?') return { group: 4, value: 0 };
 
-    return { group: 5, value: 0 }; // fallback
+    return { group: 5, value: 0 };
   };
 
   return [...tiles].sort((a, b) => {
@@ -228,7 +232,7 @@ function sortRack(tiles: string[]): string[] {
     const rb = getRank(b);
 
     if (ra.group !== rb.group) return ra.group - rb.group;
-    return ra.value - rb.value;
+    return (ra.value - rb.value) || a.localeCompare(b);
   });
 }
 
