@@ -6,6 +6,7 @@ import authRouter from './router/auth.js';
 import assignmentRouter from './router/assignment.js';
 import settingsRouter from './router/setting.js';
 import exportRouter from './router/export.js';
+import configTestRouter from './router/configTest.js';
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use('/auth', authRouter);
 app.use('/assignments', assignmentRouter);
 app.use('/api/export', exportRouter);
+app.use('/config-tests', configTestRouter);
 
 // 🔥 ตัวที่คุณขาด
 app.use('/', settingsRouter);

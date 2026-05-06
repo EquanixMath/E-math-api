@@ -1,4 +1,5 @@
-import puppeteer, { type Browser } from 'puppeteer';
+import puppeteer, { type Browser } from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import type { ExportPuzzle, ExportRequest } from '../types/export.js';
 
 // ─── TOKEN POINTS (mirrors amathTokens.ts in frontend) ───────────────────────
@@ -40,8 +41,9 @@ let browserInstance: Browser | null = null;
 async function getBrowser(): Promise<Browser> {
   if (!browserInstance || !browserInstance.connected) {
     browserInstance = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   }
   return browserInstance;
